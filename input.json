@@ -1,0 +1,4 @@
+{
+  "baseUrl": "http://localhost:5000",
+  "_comment": "No auth tokens — this API uses no authentication. Add roles/tokens here if auth is later implemented."
+}

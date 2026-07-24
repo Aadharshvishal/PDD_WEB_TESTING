@@ -1,0 +1,665 @@
+<div class="app-root" [class.dark-mode]="darkMode">
+
+<!-- ============================= AUTH SCREEN ============================= -->
+<div class="auth-screen" *ngIf="!isAuthenticated">
+  <div class="auth-card">
+    <img src="assets/proxenix_icon.png" alt="Proxenix" class="auth-logo" />
+    <h1 class="auth-title">Proxenix Portal</h1>
+    <p class="auth-subtitle">Oral Cancer Detection AI</p>
+
+    <div class="pill-tabs">
+      <button class="pill-tab" [class.active]="authMode === 'signin'" (click)="setAuthMode('signin')">Sign In</button>
+      <button class="pill-tab" [class.active]="authMode === 'signup'" (click)="setAuthMode('signup')">Create Account</button>
+    </div>
+
+    <form (ngSubmit)="submitAuth()">
+      <div class="field-group">
+        <label>Clinician Worker ID</label>
+        <input type="text" placeholder="e.g. DR_SMITH" [(ngModel)]="workerIdInput" name="workerIdInput" autocomplete="off" />
+      </div>
+
+      <div class="field-group">
+        <label>Secure Access PIN (Min. 4 digits)</label>
+        <input type="password" inputmode="numeric" maxlength="8" [(ngModel)]="pinInput" name="pinInput" autocomplete="off" />
+      </div>
+
+      <div class="field-group" *ngIf="authMode === 'signup'">
+        <label>Confirm PIN</label>
+        <input type="password" inputmode="numeric" maxlength="8" [(ngModel)]="confirmPinInput" name="confirmPinInput" autocomplete="off" />
+      </div>
+
+      <div class="auth-error" *ngIf="authError">
+        <lucide-icon name="shield-alert" [size]="18"></lucide-icon>
+        <span>{{ authError }}</span>
+      </div>
+
+      <button type="submit" class="btn-primary btn-full" [disabled]="authLoading">
+        <span class="spinner" *ngIf="authLoading"></span>
+        <span *ngIf="!authLoading">Enter Clinical Portal</span>
+      </button>
+    </form>
+
+    <p class="auth-footer">Authorized Medical Screening Personnel Only. All activities logged.</p>
+  </div>
+</div>
+
+<!-- ============================= MAIN APP ============================= -->
+<div class="main-shell" *ngIf="isAuthenticated">
+
+  <!-- Mobile header -->
+  <div class="mobile-header">
+    <button class="icon-btn" (click)="toggleMobileSidebar()">
+      <lucide-icon name="menu" [size]="22"></lucide-icon>
+    </button>
+    <img src="assets/proxenix_icon.png" alt="Proxenix" class="mobile-logo" />
+    <span class="mobile-title">{{ pageTitles[activeTab] }}</span>
+  </div>
+
+  <div class="sidebar-backdrop" *ngIf="mobileSidebarOpen" (click)="toggleMobileSidebar()"></div>
+
+  <!-- Sidebar -->
+  <aside class="sidebar" [class.open]="mobileSidebarOpen">
+    <div class="sidebar-header">
+      <img src="assets/proxenix_icon.png" alt="Proxenix" class="sidebar-logo" />
+      <div>
+        <div class="sidebar-brand">Proxenix</div>
+        <div class="sidebar-version">OSCC Detect</div>
+      </div>
+      <button class="icon-btn mobile-only" (click)="toggleMobileSidebar()">
+        <lucide-icon name="x" [size]="20"></lucide-icon>
+      </button>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Main</div>
+      <button class="nav-item" [class.active]="activeTab === 'dashboard'" (click)="setTab('dashboard')">
+        <lucide-icon name="layout-dashboard" [size]="18"></lucide-icon> Clinical Dashboard
+      </button>
+      <button class="nav-item" [class.active]="activeTab === 'consent'" (click)="setTab('consent')">
+        <lucide-icon name="file-plus-2" [size]="18"></lucide-icon> Start Patient Screening
+      </button>
+      <button class="nav-item" [class.active]="activeTab === 'records'" (click)="setTab('records')">
+        <lucide-icon name="users" [size]="18"></lucide-icon> Patient Records
+      </button>
+
+      <div class="nav-section-label">Clinical Tools</div>
+      <button class="nav-item" [class.active]="activeTab === 'risk'" (click)="setTab('risk')">
+        <lucide-icon name="clipboard-check" [size]="18"></lucide-icon> Risk Questionnaire
+      </button>
+      <button class="nav-item" [class.active]="activeTab === 'specialists'" (click)="setTab('specialists')">
+        <lucide-icon name="stethoscope" [size]="18"></lucide-icon> Specialist Guide
+      </button>
+      <button class="nav-item" [class.active]="activeTab === 'hospitals'" (click)="setTab('hospitals')">
+        <lucide-icon name="building-2" [size]="18"></lucide-icon> Oncology Centers
+      </button>
+      <button class="nav-item" [class.active]="activeTab === 'guidelines'" (click)="setTab('guidelines')">
+        <lucide-icon name="compass" [size]="18"></lucide-icon> Clinical Guidelines
+      </button>
+
+      <div class="nav-section-label">System</div>
+      <button class="nav-item" [class.active]="activeTab === 'settings'" (click)="setTab('settings')">
+        <lucide-icon name="settings" [size]="18"></lucide-icon> Portal Settings
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="clinician-card">
+        <div class="avatar">{{ clinicianInitials }}</div>
+        <div>
+          <div class="clinician-name">Dr. {{ workerId }}</div>
+          <div class="clinician-role">Medical Officer</div>
+        </div>
+      </div>
+      <button class="btn-signout" (click)="logout()">
+        <lucide-icon name="log-out" [size]="16"></lucide-icon> Sign Out
+      </button>
+    </div>
+  </aside>
+
+  <!-- Top bar + content -->
+  <div class="content-wrap">
+    <header class="topbar">
+      <h1 class="page-title">{{ pageTitles[activeTab] }}</h1>
+      <div class="topbar-actions">
+        <button class="api-badge" [class.connected]="apiConnected" (click)="pingApi()">
+          <lucide-icon [name]="apiConnected ? 'wifi' : 'wifi-off'" [size]="14"></lucide-icon>
+          {{ apiConnected ? 'API Connected' : 'Standalone Demo Mode' }}
+        </button>
+        <button class="icon-btn theme-toggle" (click)="toggleTheme()">
+          <lucide-icon [name]="darkMode ? 'sun' : 'moon'" [size]="18"></lucide-icon>
+        </button>
+      </div>
+    </header>
+
+    <main class="main-content">
+
+      <!-- ===================== DASHBOARD ===================== -->
+      <section *ngIf="activeTab === 'dashboard'">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <lucide-icon name="layers" [size]="20"></lucide-icon>
+            <div class="stat-value">{{ totalScreened }}</div>
+            <div class="stat-label">Total Screened</div>
+          </div>
+          <div class="stat-card">
+            <lucide-icon name="shield-alert" [size]="20" style="color:#DC2626"></lucide-icon>
+            <div class="stat-value" style="color:#DC2626">{{ highRiskCount }}</div>
+            <div class="stat-label">High Risk</div>
+          </div>
+          <div class="stat-card">
+            <lucide-icon name="alert-triangle" [size]="20" style="color:#D97706"></lucide-icon>
+            <div class="stat-value" style="color:#D97706">{{ suspiciousCount }}</div>
+            <div class="stat-label">Suspicious</div>
+          </div>
+          <div class="stat-card">
+            <lucide-icon name="check-circle-2" [size]="20" style="color:#16A34A"></lucide-icon>
+            <div class="stat-value" style="color:#16A34A">{{ normalCount }}</div>
+            <div class="stat-label">Healthy / Normal</div>
+          </div>
+        </div>
+
+        <div class="hero-grid">
+          <div class="hero-banner">
+            <div class="hero-deco" aria-hidden="true">
+              <svg viewBox="0 0 200 200" width="160" height="160">
+                <circle cx="100" cy="100" r="80" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="1.5" stroke-dasharray="6 6"/>
+                <circle cx="100" cy="100" r="50" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.5" stroke-dasharray="4 4"/>
+                <line x1="100" y1="10" x2="100" y2="190" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
+                <line x1="10" y1="100" x2="190" y2="100" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
+              </svg>
+            </div>
+            <h2>Start Oral Screening</h2>
+            <p>Proxenix uses a dual-triage clinical pipeline combining optical lesion analysis and risk profiling to assist early oral cancer screening.</p>
+            <button class="btn-hero" (click)="setTab('consent')">
+              <lucide-icon name="file-plus-2" [size]="16"></lucide-icon> Scan Patient Lesion
+            </button>
+          </div>
+          <div class="quick-actions">
+            <button class="qa-card" (click)="setTab('risk')">
+              <lucide-icon name="clipboard-check" [size]="20"></lucide-icon> Risk Profiler
+            </button>
+            <button class="qa-card" (click)="setTab('records')">
+              <lucide-icon name="users" [size]="20"></lucide-icon> Records
+            </button>
+            <button class="qa-card" (click)="setTab('specialists')">
+              <lucide-icon name="stethoscope" [size]="20"></lucide-icon> Referrals
+            </button>
+            <button class="qa-card" (click)="setTab('hospitals')">
+              <lucide-icon name="building-2" [size]="20"></lucide-icon> Centers
+            </button>
+          </div>
+        </div>
+
+        <div class="card table-card">
+          <h3>Recent Patient Screenings</h3>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Patient ID</th><th>Screening Date</th><th>Risk Triage</th>
+                  <th>Confidence %</th><th>Recommending Officer</th><th>Report</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let r of recentRecords; trackBy: trackByPatientId">
+                  <td>{{ r.patientId }}</td>
+                  <td>{{ r.date }}</td>
+                  <td><span class="badge" [ngClass]="{'badge-high': r.riskLevel==='High Risk','badge-susp': r.riskLevel==='Suspicious','badge-normal': r.riskLevel==='Normal'}">{{ r.riskLevel }}</span></td>
+                  <td>{{ r.confidence }}%</td>
+                  <td>{{ r.clinician }}</td>
+                  <td><button class="btn-small" (click)="openReport(r)"><lucide-icon name="file-text" [size]="14"></lucide-icon></button></td>
+                </tr>
+                <tr *ngIf="recentRecords.length === 0"><td colspan="6" class="empty-row">No screenings recorded yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== SCREENING FLOW ===================== -->
+      <section *ngIf="activeTab === 'consent'">
+        <div class="step-indicator">
+          <div class="step" [class.active]="screeningStep===1" [class.done]="screeningStep>1">1. Intake Consent</div>
+          <div class="step" [class.active]="screeningStep===2" [class.done]="screeningStep>2">2. Capture Triage</div>
+          <div class="step" [class.active]="screeningStep===3">3. Diagnosis Report</div>
+        </div>
+
+        <!-- STEP 1: CONSENT -->
+        <div class="card" *ngIf="screeningStep === 1">
+          <h3>PROXENIX OSCC EARLY TRIAGE PROTOCOL DISCLOSURE</h3>
+          <div class="consent-scroll">
+            <p>This screening tool uses AI-assisted optical image analysis to help identify visual patterns that may be associated with early-stage oral squamous cell carcinoma (OSCC) risk indicators.</p>
+            <p>The analysis method combines convolutional feature extraction with a clinical decision threshold to produce a triage classification: Normal, Suspicious, or High Risk. This classification is a screening aid only.</p>
+            <p><strong>Clinical Disclaimer:</strong> This tool does not provide a medical diagnosis. It does not replace evaluation by a licensed healthcare professional, histopathological biopsy, or any standard-of-care diagnostic protocol. All results, regardless of classification, should be interpreted by qualified clinical staff.</p>
+            <p><strong>Data Privacy:</strong> Captured images and screening results are stored locally within this browser session for record-keeping and report generation. No data is transmitted externally unless Live API mode is explicitly enabled by clinical staff in Portal Settings.</p>
+            <p><strong>Patient Consent:</strong> By proceeding, the patient (or their authorized representative) acknowledges understanding of the screening purpose, its limitations, and voluntarily consents to the capture and AI-assisted analysis of an oral cavity image for triage purposes.</p>
+            <p>A qualified clinician must review all results and determine appropriate next steps, including referral for professional medical diagnosis where indicated.</p>
+          </div>
+
+          <div class="field-group">
+            <label>Patient ID</label>
+            <div class="input-row">
+              <input type="text" [(ngModel)]="patientId" name="patientId" placeholder="OSCC-2026-XXXX" />
+              <button class="btn-secondary" (click)="generatePatientId()">Auto-Generate ID</button>
+            </div>
+          </div>
+
+          <label class="checkbox-row">
+            <input type="checkbox" [(ngModel)]="consentChecked" name="consentChecked" />
+            I hereby verify patient understanding and active clinical consent.
+          </label>
+
+          <div class="field-group">
+            <label>Digital Signature</label>
+            <canvas #signatureCanvas width="700" height="150" class="signature-canvas"
+              (mousedown)="startDrawing($event)" (mousemove)="draw($event)" (mouseup)="stopDrawing()" (mouseleave)="stopDrawing()"
+              (touchstart)="startDrawing($event)" (touchmove)="draw($event)" (touchend)="stopDrawing()"></canvas>
+            <p class="sig-placeholder" *ngIf="!hasSignature">Sign above using mouse or touch</p>
+            <button class="btn-link" *ngIf="hasSignature" (click)="clearSignature()">
+              <lucide-icon name="eraser" [size]="14"></lucide-icon> Clear Signature
+            </button>
+          </div>
+
+          <button class="btn-primary" [disabled]="!canProceedFromConsent" (click)="proceedToCapture()">
+            Proceed to Capture <lucide-icon name="arrow-right" [size]="16"></lucide-icon>
+          </button>
+        </div>
+
+        <!-- STEP 2: CAPTURE -->
+        <div class="card" *ngIf="screeningStep === 2">
+          <div class="patient-id-banner">Patient ID: <strong>{{ patientId }}</strong></div>
+
+          <div class="pill-tabs">
+            <button class="pill-tab" [class.active]="captureMode==='upload'" (click)="setCaptureMode('upload')">
+              <lucide-icon name="image" [size]="16"></lucide-icon> Upload Local Photo
+            </button>
+            <button class="pill-tab" [class.active]="captureMode==='webcam'" (click)="setCaptureMode('webcam')">
+              <lucide-icon name="camera" [size]="16"></lucide-icon> Web Camera Triage
+            </button>
+          </div>
+
+          <div *ngIf="captureMode === 'upload' && !selectedImage">
+            <div class="dropzone" (drop)="onFileDrop($event)" (dragover)="onDragOver($event)" (click)="triggerFileInput()">
+              <lucide-icon name="upload" [size]="28"></lucide-icon>
+              <p>Drag & drop an oral image here, or click to browse</p>
+              <input #fileInput type="file" accept="image/*" hidden (change)="onFileSelected($event)" />
+            </div>
+          </div>
+
+          <div *ngIf="captureMode === 'webcam' && !selectedImage" class="webcam-wrap">
+            <video #webcamVideo autoplay playsinline muted></video>
+            <div class="webcam-grid"></div>
+            <button class="shutter-btn" (click)="captureFromWebcam()"></button>
+          </div>
+
+          <div class="image-preview" *ngIf="selectedImage">
+            <img [src]="selectedImage" alt="Captured lesion" />
+            <div class="scan-grid"></div>
+            <div class="scan-line" *ngIf="isProcessing"></div>
+            <button class="remove-img-btn" (click)="removeImage()" *ngIf="!isProcessing">
+              <lucide-icon name="trash-2" [size]="16"></lucide-icon>
+            </button>
+          </div>
+
+          <canvas #analysisCanvas width="224" height="224" hidden></canvas>
+
+          <div class="processing-block" *ngIf="isProcessing">
+            <span class="spinner"></span>
+            <div class="processing-percent">AI Processing — {{ processingPercent }}%</div>
+            <div class="processing-stage">{{ processingStage }}</div>
+          </div>
+
+          <div class="step-actions">
+            <button class="btn-secondary" (click)="backToConsent()" [disabled]="isProcessing">
+              <lucide-icon name="arrow-left" [size]="16"></lucide-icon> Back
+            </button>
+            <button class="btn-primary" *ngIf="selectedImage && !isProcessing" (click)="analyzeImage()">Analyze Patient Image</button>
+          </div>
+        </div>
+
+        <!-- STEP 3: RESULT -->
+        <div class="card result-card" *ngIf="screeningStep === 3 && resultRisk">
+          <span class="badge badge-lg" [ngClass]="{'badge-high': resultRisk==='High Risk','badge-susp': resultRisk==='Suspicious','badge-normal': resultRisk==='Normal'}">{{ resultRisk }}</span>
+          <h3>Screening Outcomes</h3>
+
+          <div class="gauge-wrap">
+            <svg viewBox="0 0 160 160" width="160" height="160">
+              <circle cx="80" cy="80" r="70" fill="none" stroke="var(--border-color)" stroke-width="12"/>
+              <circle cx="80" cy="80" r="70" fill="none" [attr.stroke]="resultGaugeColor" stroke-width="12"
+                stroke-linecap="round" [attr.stroke-dasharray]="resultGaugeDashArray" transform="rotate(-90 80 80)"/>
+              <text x="80" y="75" text-anchor="middle" font-size="26" font-weight="700" [attr.fill]="resultGaugeColor">{{ resultConfidence }}%</text>
+              <text x="80" y="95" text-anchor="middle" font-size="11" fill="var(--text-secondary)">Confidence</text>
+            </svg>
+          </div>
+
+          <p class="result-meta">Diagnostic Confidence: <strong>{{ resultConfidence }}%</strong> &nbsp;•&nbsp; Clinical Match: <strong>{{ resultRawScore*100 | number:'1.0-2' }}%</strong></p>
+          <p class="result-recommendation">{{ resultRecommendation }}</p>
+          <p class="result-explanation">{{ resultExplanation }}</p>
+
+          <div class="step-actions">
+            <button class="btn-secondary" (click)="openReport(history[0])">Generate Clinical Report</button>
+            <button class="btn-primary" (click)="newScreeningIntake()">New Screening Intake</button>
+          </div>
+          <div class="step-actions" *ngIf="resultRisk !== 'Normal'">
+            <button class="btn-link" (click)="setTab('specialists')">Refer to Specialists</button>
+            <button class="btn-link" (click)="setTab('hospitals')">Oncology Centers</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== RECORDS ===================== -->
+      <section *ngIf="activeTab === 'records'">
+        <h2 class="section-title">Registered Patient Archives</h2>
+        <p class="section-desc">Complete diagnostic and questionnaire history recorded on this device.</p>
+
+        <div class="records-toolbar">
+          <div class="search-box">
+            <lucide-icon name="search" [size]="16"></lucide-icon>
+            <input type="text" placeholder="Search by Patient ID or clinician" [(ngModel)]="recordsSearch" name="recordsSearch" />
+          </div>
+          <button class="btn-danger-outline" (click)="clearAllRecords()" *ngIf="history.length > 0">
+            <lucide-icon name="trash-2" [size]="14"></lucide-icon> Clear All Database Records
+          </button>
+        </div>
+
+        <div class="card table-card">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Patient ID</th><th>Intake Date</th><th>Category</th><th>Risk Level</th>
+                  <th>Confidence</th><th>Clinician</th><th>Report</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let r of filteredHistory; trackBy: trackByPatientId">
+                  <td>{{ r.patientId }}</td>
+                  <td>{{ r.date }}</td>
+                  <td>{{ r.category }}</td>
+                  <td><span class="badge" [ngClass]="{'badge-high': r.riskLevel==='High Risk','badge-susp': r.riskLevel==='Suspicious','badge-normal': r.riskLevel==='Normal'}">{{ r.riskLevel }}</span></td>
+                  <td>{{ r.confidence }}%</td>
+                  <td>{{ r.clinician }}</td>
+                  <td><button class="btn-small" (click)="openReport(r)"><lucide-icon name="file-text" [size]="14"></lucide-icon></button></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="empty-state" *ngIf="history.length === 0">
+              <p>No patient records found.</p>
+              <button class="btn-secondary" (click)="seedRecords()">Seed Sample Diagnostics</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== RISK QUESTIONNAIRE ===================== -->
+      <section *ngIf="activeTab === 'risk'">
+        <div class="card quiz-card" *ngIf="quizStep === 0">
+          <div class="quiz-icon-circle"><lucide-icon name="clipboard-check" [size]="28"></lucide-icon></div>
+          <h3>Oral Cancer Risk Checklist</h3>
+          <p>A 10-question clinical symptom and lifestyle checklist that produces a weighted risk score to support early triage decisions.</p>
+          <button class="btn-primary" (click)="startQuestionnaire()">Initiate Questionnaire</button>
+        </div>
+
+        <div class="card quiz-card" *ngIf="quizStep >= 1 && quizStep <= 10">
+          <p class="quiz-progress-label">Question {{ quizStep }} of 10</p>
+          <div class="progress-bar"><div class="progress-fill" [style.width.%]="quizProgress"></div></div>
+          <h3 class="quiz-question">{{ quizQuestions[quizStep-1].text }}</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" (click)="answerQuestion(2)">YES — Severe or Frequent</button>
+            <button class="quiz-option" (click)="answerQuestion(0.8)">SOMETIMES — Mild or Occasional</button>
+            <button class="quiz-option" (click)="answerQuestion(0)">NO — Never / False</button>
+          </div>
+        </div>
+
+        <div class="card quiz-card" *ngIf="quizStep === 11">
+          <div class="score-ring" [ngClass]="{'badge-high': quizRisk==='High Risk','badge-susp': quizRisk==='Suspicious','badge-normal': quizRisk==='Normal'}">
+            {{ quizScore }}
+          </div>
+          <span class="badge badge-lg" [ngClass]="{'badge-high': quizRisk==='High Risk','badge-susp': quizRisk==='Suspicious','badge-normal': quizRisk==='Normal'}">{{ quizRisk }}</span>
+          <p class="result-recommendation">{{ quizRiskLabel }}</p>
+          <div class="step-actions">
+            <button class="btn-secondary" (click)="restartQuestionnaire()">Restart Checklist</button>
+            <button class="btn-primary" (click)="saveQuizResult()">Save Result to Patient Records</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== SPECIALISTS ===================== -->
+      <section *ngIf="activeTab === 'specialists'">
+        <div class="search-box">
+          <lucide-icon name="search" [size]="16"></lucide-icon>
+          <input type="text" placeholder="Search specialist or hospital" [(ngModel)]="specialistSearch" name="specialistSearch" />
+        </div>
+
+        <div class="grid-2col">
+          <div class="card specialist-card" *ngFor="let s of filteredSpecialists">
+            <div class="avatar avatar-lg">{{ specialistInitial(s.name) }}</div>
+            <div class="specialist-info">
+              <h4>{{ s.name }}</h4>
+              <p class="specialist-title">{{ s.title }}</p>
+              <span class="dept-badge">Oral Oncology</span>
+              <p class="specialist-hospital"><lucide-icon name="map-pin" [size]="14"></lucide-icon> {{ s.hospital }}</p>
+              <p><lucide-icon name="phone-call" [size]="14"></lucide-icon> {{ s.phone }}</p>
+              <p class="muted-text">{{ s.email }}</p>
+              <button class="btn-secondary btn-full" (click)="generateReferralLetter(s)">
+                <lucide-icon name="file-text" [size]="14"></lucide-icon> Generate Referral Letter
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="toast-success" *ngIf="settingsSuccess">{{ settingsSuccess }}</div>
+      </section>
+
+      <!-- ===================== HOSPITALS ===================== -->
+      <section *ngIf="activeTab === 'hospitals'">
+        <div class="search-box">
+          <lucide-icon name="search" [size]="16"></lucide-icon>
+          <input type="text" placeholder="Search hospital or city" [(ngModel)]="hospitalSearch" name="hospitalSearch" />
+        </div>
+
+        <div class="grid-2col">
+          <div class="card hospital-card" *ngFor="let h of filteredHospitals">
+            <div class="hospital-head">
+              <h4>{{ h.name }}</h4>
+              <span class="rating"><lucide-icon name="star" [size]="14"></lucide-icon> {{ h.rating }}</span>
+            </div>
+            <p class="muted-text"><lucide-icon name="map-pin" [size]="14"></lucide-icon> {{ h.address }}</p>
+            <div class="tag-row">
+              <span class="tag" *ngFor="let f of h.features">{{ f }}</span>
+            </div>
+            <a class="btn-secondary btn-full" [href]="'tel:' + h.phone">
+              <lucide-icon name="phone-call" [size]="14"></lucide-icon> Contact Hospital Helpline
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== GUIDELINES ===================== -->
+      <section *ngIf="activeTab === 'guidelines'">
+        <h2 class="section-title"><lucide-icon name="compass" [size]="20"></lucide-icon> Clinical Guidelines</h2>
+
+        <div class="grid-2col">
+          <div class="card">
+            <h4>Clinician Visual Exam Steps</h4>
+            <ul class="guideline-list">
+              <li>Systematically inspect the lips for texture and color changes</li>
+              <li>Examine buccal mucosa on both sides for patches or lesions</li>
+              <li>Check gingiva for swelling, bleeding, or discoloration</li>
+              <li>Inspect the dorsal, ventral, and lateral tongue surfaces</li>
+              <li>Palpate and visually examine the floor of the mouth</li>
+              <li>Review the hard palate for irregularities</li>
+              <li>Review the soft palate and uvula</li>
+              <li>Visualize the oropharynx where accessible</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>High-Risk Sign Profiles</h4>
+            <ul class="guideline-list">
+              <li><strong>Erythroplakia</strong> — red patches that cannot be attributed to other causes</li>
+              <li><strong>Non-Healing Ulcers</strong> — persisting beyond 2-3 weeks</li>
+              <li><strong>Leukoplakia</strong> — white patches that cannot be scraped off</li>
+              <li><strong>Oral Submucous Fibrosis</strong> — progressive stiffening of oral tissue</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Supportive Nutrition & Diet</h4>
+            <ul class="guideline-list">
+              <li>Emphasize antioxidant-rich vegetables and fruits</li>
+              <li>Encourage Vitamin B, C, and zinc-rich foods</li>
+              <li>Maintain consistent hydration throughout the day</li>
+              <li>Avoid tobacco, alcohol, and highly processed foods</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Clinical Hygiene Protocol</h4>
+            <ul class="guideline-list">
+              <li>Brush twice daily with fluoride toothpaste for 2 minutes</li>
+              <li>Use antiseptic mouthwash as clinically indicated</li>
+              <li>Schedule professional cleaning every 6 months</li>
+              <li>Maintain denture hygiene with daily cleaning routines</li>
+            </ul>
+          </div>
+        </div>
+        <p class="disclaimer-text">These guidelines are educational references for clinical staff and do not replace professional diagnostic protocols or local institutional policy.</p>
+      </section>
+
+      <!-- ===================== SETTINGS ===================== -->
+      <section *ngIf="activeTab === 'settings'">
+        <div class="settings-grid">
+          <div class="card">
+            <h4>AI Processing Settings</h4>
+            <label class="checkbox-row">
+              <input type="checkbox" [(ngModel)]="useLiveApi" name="useLiveApi" (change)="onUseLiveApiChange()" />
+              Redirect predictions to Local Python Flask Server
+            </label>
+            <p class="muted-text">Enabling this setting routes optical screening images to your configured Python inference server instead of the built-in offline heuristic analyzer.</p>
+
+            <div class="field-group">
+              <label>Flask API URL</label>
+              <input type="text" [(ngModel)]="apiUrl" name="apiUrl" (change)="onApiUrlChange()" placeholder="http://localhost:5000" />
+            </div>
+
+            <button class="btn-secondary" (click)="testApiConnection()">
+              <span *ngIf="settingsApiTestResult === 'idle' || settingsApiTestResult === 'testing'">Ping Server</span>
+              <span *ngIf="settingsApiTestResult === 'success'">✓ Connected</span>
+              <span *ngIf="settingsApiTestResult === 'fail'">✗ Unreachable</span>
+            </button>
+          </div>
+
+          <div class="card">
+            <h4>Change Portal PIN</h4>
+            <div class="auth-error" *ngIf="settingsError">
+              <lucide-icon name="shield-alert" [size]="16"></lucide-icon> {{ settingsError }}
+            </div>
+            <div class="toast-success" *ngIf="settingsSuccess">{{ settingsSuccess }}</div>
+
+            <div class="field-group">
+              <label>Current PIN</label>
+              <input type="password" inputmode="numeric" maxlength="8" [(ngModel)]="settingsCurrentPin" name="settingsCurrentPin" />
+            </div>
+            <div class="field-group">
+              <label>New PIN</label>
+              <input type="password" inputmode="numeric" maxlength="8" [(ngModel)]="settingsNewPin" name="settingsNewPin" />
+            </div>
+            <div class="field-group">
+              <label>Confirm New PIN</label>
+              <input type="password" inputmode="numeric" maxlength="8" [(ngModel)]="settingsConfirmPin" name="settingsConfirmPin" />
+            </div>
+            <button class="btn-primary btn-full" (click)="savePinChange()">
+              <lucide-icon name="save" [size]="16"></lucide-icon> Save PIN Password
+            </button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ============================= REPORT MODAL ============================= -->
+<div class="modal-overlay no-print" *ngIf="showReportModal" (click)="closeReport()">
+  <div class="modal-box" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Proxenix Clinical Diagnostic Report Document</h3>
+      <button class="icon-btn" (click)="closeReport()"><lucide-icon name="x" [size]="20"></lucide-icon></button>
+    </div>
+
+    <div class="report-doc" *ngIf="reportRecord as rec">
+      <div class="report-doc-head">
+        <div>
+          <h2>Proxenix Oral Cancer Triage</h2>
+          <p class="muted-text">Certified Clinical Early Diagnosis Screening Document</p>
+        </div>
+        <div class="report-doc-meta">
+          <p>Report ID: {{ reportId }}</p>
+          <p>Print Date: {{ reportPrintDate }}</p>
+        </div>
+      </div>
+
+      <div class="report-section">
+        <h4>Patient Demographics</h4>
+        <p>Enrollment ID: {{ rec.patientId }}</p>
+        <p>Intake Date: {{ rec.date }}</p>
+        <p>Screening Medium: {{ rec.category }}</p>
+      </div>
+
+      <div class="report-section">
+        <h4>Clinician Details</h4>
+        <p>Clinician Name: Dr. {{ rec.clinician }}</p>
+        <p>Department: Oral Oncology Screening</p>
+        <p>Institution: SIMATS Engineering Triage Portal</p>
+      </div>
+
+      <div class="report-section" *ngIf="rec.imageDataUrl">
+        <h4>Optical Scan</h4>
+        <img [src]="rec.imageDataUrl" class="report-scan-img" alt="Lesion scan" />
+      </div>
+
+      <div class="report-result-box" [ngClass]="{'badge-high': rec.riskLevel==='High Risk','badge-susp': rec.riskLevel==='Suspicious','badge-normal': rec.riskLevel==='Normal'}">
+        <h4>AI Triage Classification</h4>
+        <p class="report-risk-value">{{ rec.riskLevel }}</p>
+        <p>Confidence: {{ rec.confidence }}%</p>
+      </div>
+
+      <div class="report-section">
+        <h4>Clinician Action & Recommendations</h4>
+        <p>{{ rec.recommendation }}</p>
+      </div>
+
+      <div class="signature-row">
+        <div class="signature-box">
+          <p class="muted-text">Patient Consent Signature</p>
+          <img *ngIf="rec.signatureDataUrl" [src]="rec.signatureDataUrl" alt="Signature" />
+          <p *ngIf="!rec.signatureDataUrl" class="muted-text">Not captured</p>
+        </div>
+        <div class="signature-box">
+          <p class="muted-text">Clinician Signature</p>
+          <p class="cursive-sig">Dr. {{ rec.clinician }}</p>
+        </div>
+      </div>
+
+      <p class="disclaimer-text">This AI-assisted triage output is a screening aid and does not constitute a definitive medical diagnosis. All results require review by a licensed healthcare professional.</p>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-secondary" (click)="closeReport()">Cancel</button>
+      <button class="btn-primary" (click)="printReport()">
+        <lucide-icon name="printer" [size]="16"></lucide-icon> Print Certified Triage Document
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Printable-only document -->
+<div class="print-only" *ngIf="reportRecord as rec">
+  <h2>Proxenix Oral Cancer Triage — Certified Screening Document</h2>
+  <p>Report ID: {{ reportId }}</p>
+  <p>Patient ID: {{ rec.patientId }} | Date: {{ rec.date }}</p>
+  <p>Clinician: Dr. {{ rec.clinician }}</p>
+  <img *ngIf="rec.imageDataUrl" [src]="rec.imageDataUrl" style="max-width:300px" />
+  <h3>Risk Level: {{ rec.riskLevel }} ({{ rec.confidence }}%)</h3>
+  <p>{{ rec.recommendation }}</p>
+  <img *ngIf="rec.signatureDataUrl" [src]="rec.signatureDataUrl" style="max-width:300px" />
+</div>
+
+</div>

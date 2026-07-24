@@ -1,0 +1,53 @@
+name: Selenium E2E Testing and Deployment
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: web_app/package-lock.json
+
+    - name: Install Dependencies
+      working-directory: ./web_app
+      run: npm ci
+
+    - name: Build Application
+      working-directory: ./web_app
+      run: npm run build
+
+    - name: Start Application in Background
+      working-directory: ./web_app
+      run: |
+        npm run preview &
+        sleep 5
+
+    - name: Run Selenium E2E Tests
+      working-directory: ./web_app
+      run: npm run test:e2e
+      
+    - name: Deploy to GitHub Pages
+      if: success() && github.ref == 'refs/heads/main'
+      working-directory: ./web_app
+      run: |
+        git config --global user.name $user_name
+        git config --global user.email $user_email
+        git remote set-url origin https://${github_token}@github.com/${repository}
+        npm run deploy
+      env:
+        user_name: 'github-actions[bot]'
+        user_email: 'github-actions[bot]@users.noreply.github.com'
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        repository: ${{ github.repository }}
