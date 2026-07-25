@@ -34,16 +34,12 @@ jobs:
 
       - name: Install npm packages
         run: |
-          for package_json in $(find . -name "package.json" -not -path "*/node_modules/*" -not -path "*/.venv/*"); do
+          find . -name "package.json" -not -path "*/node_modules/*" -not -path "*/.venv/*" -print0 | while IFS= read -r -d '' package_json; do
             dir=$(dirname "$package_json")
             echo "Installing dependencies in $dir"
-            cd "$dir"
-            if [ -f "package-lock.json" ]; then
-              npm install
-            else
-              npm install
-            fi
-            cd -
+            pushd "$dir"
+            npm install
+            popd
           done
 
       - name: Run Selenium Tests
