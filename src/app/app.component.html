@@ -309,6 +309,11 @@
             <div class="processing-stage">{{ processingStage }}</div>
           </div>
 
+          <div class="auth-error" *ngIf="scanError" style="margin-bottom: 1rem; text-align: left;">
+            <lucide-icon name="shield-alert" [size]="18"></lucide-icon>
+            <span>{{ scanError }}</span>
+          </div>
+
           <div class="step-actions">
             <button class="btn-secondary" (click)="backToConsent()" [disabled]="isProcessing">
               <lucide-icon name="arrow-left" [size]="16"></lucide-icon> Back

@@ -71,6 +71,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   captureMode: 'upload' | 'webcam' = 'upload';
   selectedImage: string | null = null;
+  scanError: string | null = null;
   private selectedImageBlob: Blob | null = null;
   private mediaStream: MediaStream | null = null;
 
@@ -391,6 +392,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   onFileSelected(evt: Event): void {
+    this.scanError = null;
     const input = evt.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
@@ -402,6 +404,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   onFileDrop(evt: DragEvent): void {
     evt.preventDefault();
+    this.scanError = null;
     const file = evt.dataTransfer?.files?.[0];
     if (!file) return;
     this.selectedImageBlob = file;
@@ -433,6 +436,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   captureFromWebcam(): void {
+    this.scanError = null;
     const video = this.webcamVideoRef?.nativeElement;
     if (!video) return;
     const canvas = document.createElement('canvas');
@@ -449,11 +453,13 @@ export class AppComponent implements OnInit, OnDestroy {
   removeImage(): void {
     this.selectedImage = null;
     this.selectedImageBlob = null;
+    this.scanError = null;
     if (this.fileInputRef) this.fileInputRef.nativeElement.value = '';
   }
 
   backToConsent(): void {
     this.stopWebcam();
+    this.scanError = null;
     this.screeningStep = 1;
   }
 
@@ -462,6 +468,14 @@ export class AppComponent implements OnInit, OnDestroy {
   // ===================================================================
   async analyzeImage(): Promise<void> {
     if (!this.selectedImage) return;
+
+    this.scanError = null;
+    const isValid = await this.validateImage(this.selectedImage);
+    if (!isValid) {
+      this.scanError = 'Not an appropriate photo. Please upload a clear photo of the oral cavity.';
+      return;
+    }
+
     this.isProcessing = true;
     this.processingPercent = 0;
     this.processingStage = 'Initializing...';
@@ -495,6 +509,51 @@ export class AppComponent implements OnInit, OnDestroy {
     this.applyRiskClassification(rawScore);
     this.isProcessing = false;
     this.screeningStep = 3;
+  }
+
+  private validateImage(imageSrc: string): Promise<boolean> {
+    return new Promise(resolve => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 224; canvas.height = 224;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { resolve(true); return; }
+
+      const img = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0, 224, 224);
+        try {
+          const data = ctx.getImageData(0, 0, 224, 224).data;
+          let rTotal = 0, gTotal = 0, bTotal = 0;
+          let warmPixels = 0;
+          
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i], g = data[i + 1], b = data[i + 2];
+            rTotal += r;
+            gTotal += g;
+            bTotal += b;
+            // Strong red dominance check (oral cavity / skin)
+            if (r > g + 10 && r > b + 10 && r > 60) {
+              warmPixels++;
+            }
+          }
+          
+          const pixelCount = 224 * 224;
+          const rAvg = rTotal / pixelCount;
+          const gAvg = gTotal / pixelCount;
+          const bAvg = bTotal / pixelCount;
+          
+          const warmRatio = warmPixels / pixelCount;
+          // Must have at least 15% warm pixels OR average color must be strongly red-leaning
+          const isAppropriate = warmRatio > 0.15 || (rAvg > gAvg + 5 && rAvg > bAvg + 5);
+          
+          resolve(isAppropriate);
+        } catch {
+          resolve(true); // if error, default to true
+        }
+      };
+      img.onerror = () => resolve(true);
+      img.src = imageSrc;
+    });
   }
 
   private heuristicAnalysis(): Promise<number> {
@@ -593,6 +652,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.clearSignature();
     this.selectedImage = null;
     this.selectedImageBlob = null;
+    this.scanError = null;
     this.captureMode = 'upload';
     this.resultRisk = null;
     this.stopWebcam();
