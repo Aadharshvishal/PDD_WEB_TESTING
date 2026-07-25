@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import proxenixLogo from './assets/proxenix_icon.png';
+import { evaluateOralImagePixels } from './utils/oralImageValidation';
 import { 
   ShieldAlert, 
   Activity, 
@@ -570,7 +571,7 @@ export default function App() {
   // Advanced Canvas Heuristic Lesion Detector (Demo fallback)
   // Evaluates standard colors on an oral photo looking for suspicious red/white lesion patches
   const runHeuristicPixelAnalysis = (imageSrc) => {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
@@ -578,41 +579,40 @@ export default function App() {
         canvas.height = 224;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, 224, 224);
-        
+
         const imgData = ctx.getImageData(0, 0, 224, 224);
         const pixels = imgData.data;
-        
+        const validation = evaluateOralImagePixels(pixels, 224, 224);
+
+        if (!validation.acceptable) {
+          reject(new Error(validation.reason));
+          return;
+        }
+
         let redPixels = 0;
         let whitePixels = 0;
-        let totalVal = 0;
-        
+
         for (let i = 0; i < pixels.length; i += 4) {
           const r = pixels[i];
-          const g = pixels[i+1];
-          const b = pixels[i+2];
-          
-          // Heuristic red lesion score (high red ratios)
+          const g = pixels[i + 1];
+          const b = pixels[i + 2];
+
           if (r > 150 && g < 100 && b < 100) {
             redPixels++;
           }
-          // Heuristic white leukoplakia score
           if (r > 200 && g > 200 && b > 200) {
             whitePixels++;
           }
-          totalVal += (r + g + b) / 3;
         }
 
-        // Compute simulated risk score
         const lesionDensity = (redPixels + whitePixels) / (224 * 224);
-        let baseScore = lesionDensity * 12; // amplify score
-        
-        // Add random seed variables for dynamic results
+        let baseScore = lesionDensity * 12;
         baseScore = Math.min(Math.max(baseScore, 0.1), 0.98);
-        // Slightly random variance so same photo has clinical realism
         const finalScore = Math.min(Math.max(baseScore + (Math.random() - 0.5) * 0.05, 0.02), 0.99);
-        
+
         resolve(finalScore);
       };
+      img.onerror = () => reject(new Error('Unable to read the selected image. Please choose another photo.'));
       img.src = imageSrc;
     });
   };
@@ -665,7 +665,6 @@ export default function App() {
           throw new Error('API server returned error');
         }
       } else {
-        // Run advanced heuristic simulation on the uploaded image
         rawScore = await runHeuristicPixelAnalysis(selectedImage);
       }
 
@@ -713,7 +712,8 @@ export default function App() {
       setScanProgress(100);
       setScanStep(3); // Result tab
     } catch (e) {
-      alert('Triage Analysis Failed: ' + e.message);
+      setScanResult(null);
+      alert(e.message || 'Triage Analysis Failed');
     } finally {
       setScanningActive(false);
     }

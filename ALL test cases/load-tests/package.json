@@ -1,0 +1,13 @@
+{
+  "name": "load-tests",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "baseline": "node baseline-load.js",
+    "report": "node scripts/generate-load-report.js"
+  },
+  "dependencies": {
+    "exceljs": "^4.3.0",
+    "undici": "^6.0.0"
+  }
+}
