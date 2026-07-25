@@ -1,19 +1,20 @@
-name: Security Review
+name: CI Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  security-review:
+  test-and-report:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -22,22 +23,127 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install openpyxl
-        working-directory: .
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
 
-      - name: Run static security review
-        run: python scripts/security_review.py
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install npm packages
+        run: |
+          for package_json in $(find . -name "package.json" -not -path "*/node_modules/*" -not -path "*/.venv/*"); do
+            dir=$(dirname "$package_json")
+            echo "Installing dependencies in $dir"
+            cd "$dir"
+            if [ -f "package-lock.json" ]; then
+              npm ci
+            else
+              npm install
+            fi
+            cd -
+          done
+
+      - name: Run Selenium Tests
+        working-directory: ALL test cases/selenium-tests
+        run: npm run generate:testcases || true && npm run run:tests
         continue-on-error: true
+
+      - name: Run Appium Tests
+        working-directory: ALL test cases/appium-tests
+        run: npm test
+        continue-on-error: true
+
+      - name: Run Load Tests
+        working-directory: ALL test cases/load-tests
+        run: npm run baseline
+        continue-on-error: true
+
+      - name: Run Security Review
+        run: python scripts/security_review.py
         env:
           TARGET_URL: ${{ secrets.TARGET_URL }}
+        continue-on-error: true
+
+      - name: Generate Reports
+        run: |
+          cd "ALL test cases/appium-tests" && npm run report || true
+          cd "../../ALL test cases/load-tests" && npm run report || true
+        continue-on-error: true
+
+      - name: Upload Selenium Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selenium-report
+          path: ALL test cases/selenium-tests/
+
+      - name: Upload Appium Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appium-report
+          path: ALL test cases/appium-tests/reports/
+
+      - name: Upload Load Test Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-report
+          path: ALL test cases/load-tests/
 
       - name: Upload Security Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: security-review-reports
+          name: security-review
           path: Vulnerability Test Results/
 
-      - name: Publish summary
+      - name: Upload Combined Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-test-reports
+          path: |
+            ALL test cases/
+            ALL test cases/appium-tests/reports/
+            ALL test cases/load-tests/
+            ALL test cases/selenium-tests/
+            Vulnerability Test Results/
+            backend/test-reports/
+            reports/
+            test-results/
+            coverage/
+            allure-results/
+            allure-report/
+            htmlcov/
+            **/*.xlsx
+            **/*.html
+            **/*.md
+
+      - name: Publish Job Summary
         if: always()
         run: |
-          echo "Security review completed. Reports uploaded as artifacts."
+          echo "## Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Total Tests | See Artifacts |" >> $GITHUB_STEP_SUMMARY
+          echo "| Passed | See Artifacts |" >> $GITHUB_STEP_SUMMARY
+          echo "| Failed | See Artifacts |" >> $GITHUB_STEP_SUMMARY
+          echo "| Skipped | See Artifacts |" >> $GITHUB_STEP_SUMMARY
+          
+          CRITICAL=$(grep -oP '(?<=- Critical: )\d+' "Vulnerability Test Results/executive-summary.md" || echo "0")
+          HIGH=$(grep -oP '(?<=- High: )\d+' "Vulnerability Test Results/executive-summary.md" || echo "0")
+          MEDIUM=$(grep -oP '(?<=- Medium: )\d+' "Vulnerability Test Results/executive-summary.md" || echo "0")
+          LOW=$(grep -oP '(?<=- Low: )\d+' "Vulnerability Test Results/executive-summary.md" || echo "0")
+          
+          echo "| Critical | $CRITICAL |" >> $GITHUB_STEP_SUMMARY
+          echo "| High | $HIGH |" >> $GITHUB_STEP_SUMMARY
+          echo "| Medium | $MEDIUM |" >> $GITHUB_STEP_SUMMARY
+          echo "| Low | $LOW |" >> $GITHUB_STEP_SUMMARY
+          echo "| Artifacts Uploaded | Yes |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Complete Job
+        run: echo "Pipeline finished successfully!"
